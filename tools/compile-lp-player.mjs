@@ -1,0 +1,14 @@
+import './check-lp-player.mjs';
+import {spawn} from 'node:child_process';
+import {mkdir,writeFile} from 'node:fs/promises';
+import {fileURLToPath} from 'node:url';
+const root=fileURLToPath(new URL('../',import.meta.url)),out=new URL('../projects/lp-player/build/',import.meta.url);
+await mkdir(out,{recursive:true});
+const args=['compile','--fqbn','nucode:nrf52:nu40dk','--build-path',fileURLToPath(new URL('../projects/lp-player/build-cache/',import.meta.url)),'--output-dir',fileURLToPath(out),'firmware/lp_player'];
+const child=spawn('arduino-cli',args,{cwd:root});let log='';child.stdout.on('data',d=>log+=d);child.stderr.on('data',d=>log+=d);
+const code=await new Promise((resolve,reject)=>{child.on('error',reject);child.on('close',resolve);});
+await writeFile(new URL('compile.log',out),log);
+if(code!==0)throw Error('Compile failed: projects/lp-player/build/compile.log');
+const flash=log.match(/Sketch uses (\d+) bytes.*Maximum is (\d+)/),ram=log.match(/Global variables use (\d+) bytes.*leaving (\d+) bytes.*Maximum is (\d+)/);
+const report={compileSucceeded:true,fqbn:'nucode:nrf52:nu40dk',flashBytes:flash?+flash[1]:null,staticRAMBytes:ram?+ram[1]:null,ramRemainingBytes:ram?+ram[2]:null,uploaded:false};
+await writeFile(new URL('report.json',out),JSON.stringify(report,null,2)+'\n');console.log(JSON.stringify(report));

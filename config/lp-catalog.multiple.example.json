@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "tracks": [
+    {
+      "id": "song-one",
+      "uid": "04AABBCCDDEEFF",
+      "trackNumber": 1,
+      "title": "First song",
+      "artist": "First artist",
+      "durationMs": 180000,
+      "audio": "audio/song-one.mp3",
+      "cover": "covers/song-one.jpg"
+    },
+    {
+      "id": "song-two",
+      "uid": "04112233445566",
+      "trackNumber": 2,
+      "title": "Second song",
+      "artist": "Second artist",
+      "durationMs": 210000,
+      "audio": "audio/song-two.mp3",
+      "cover": "covers/song-two.jpg"
+    }
+  ]
+}

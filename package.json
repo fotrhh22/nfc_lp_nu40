@@ -1,0 +1,19 @@
+{
+  "name": "nfc-lp-table",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lp:generate": ".venv/bin/python tools/build-lp-player.py",
+    "lp:sd": ".venv/bin/python tools/build-lp-player.py --prepare-sd",
+    "lp:check": "node tools/check-lp-player.mjs",
+    "lp:compile": "node tools/compile-lp-player.mjs",
+    "lp:test": "node tools/test-lp-player.mjs",
+    "lp:preview": ".venv/bin/python tools/render-lp-preview.py",
+    "lp:add": ".venv/bin/python tools/lp-catalog.py add",
+    "lp:list": ".venv/bin/python tools/lp-catalog.py list",
+    "check": "node tools/check-lp-player.mjs",
+    "test": "node tools/test-lp-player.mjs",
+    "build": "node tools/compile-lp-player.mjs"
+  }
+}

@@ -1,0 +1,88 @@
+// UID-selected LP player. No lyric-demo runtime dependency.
+#include <Arduino.h>
+#include <SPI.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_ILI9341.h>
+#include <MFRC522.h>
+#include "lp_assets.h"
+struct TouchRecord;struct TouchRaw;
+static_assert(LP_PACKAGE_ID==@PACKAGE_ID@u,"Regenerate LP player and assets together");
+constexpr uint8_t TFT_CS=44,TFT_DC=3,TFT_RESET=4,TOUCH_CS=35,RFID_CS=26,RFID_RESET=27;
+constexpr uint8_t PLAY_BUTTON=37,VOLUME_UP_BUTTON=38,VOLUME_DOWN_BUTTON=39;
+Adafruit_ILI9341 tft(&SPI,TFT_DC,TFT_CS,TFT_RESET);
+MFRC522 rfid(RFID_CS,RFID_RESET);
+static uint16_t rgbFrame[320*240];
+static LpState player;
+static bool uiDirty=true,rfidReady=false,forceCalibration=false;
+static uint32_t lastDrawMs=0,lastRfidMs=0;
+static uint8_t lastUid[10],lastUidLength=0;
+struct Button {
+ uint8_t pin;bool raw=HIGH,stable=HIGH;uint32_t at=0;
+ explicit Button(uint8_t p):pin(p){}
+ bool pressed(uint32_t now){bool value=digitalRead(pin);if(value!=raw){raw=value;at=now;}if(stable!=value&&uint32_t(now-at)>=35){stable=value;return !stable;}return false;}
+};
+static Button playButton{37},volumeUpButton{38},volumeDownButton{39};
+@AUDIO_IMPLEMENTATION@
+@TOUCH_IMPLEMENTATION@
+static void pushFinishedFrame(){tft.drawRGBBitmap(0,0,rgbFrame,320,240);}
+static void renderAt(uint32_t){const uint32_t began=millis();lpRender(rgbFrame,player,began);pushFinishedFrame();lastDrawMs=began;uiDirty=false;}
+static void applyEvent(LpEvent event){
+ if(event==LpEvent::None)return;queueTransport(event);uiDirty=true;
+ Serial.print("LP state: ");Serial.print(player.playing?"playing":"paused");Serial.print(" track=");Serial.println(player.active);
+}
+static void togglePlayback(){
+ if(!player.present){Serial.println("PLAY blocked: registered NFC required");return;}
+ applyEvent(player.toggle(millis()));
+}
+static void changeVolume(int amount){player.adjustVolume(amount);queueAudio(0x06,player.volume);uiDirty=true;Serial.print("Volume=");Serial.println(player.volume);}
+static void printUid(const uint8_t* uid,uint8_t size){
+ Serial.print("UID ");const char* hex="0123456789ABCDEF";
+ for(uint8_t i=0;i<size;i++){Serial.print(hex[uid[i]>>4]);Serial.print(hex[uid[i]&15]);}Serial.println();
+}
+static void initRfid(){
+ digitalWrite(TFT_CS,HIGH);digitalWrite(TOUCH_CS,HIGH);rfid.PCD_Init();uint8_t version=rfid.PCD_ReadRegister(MFRC522::VersionReg);
+ rfidReady=version!=0&&version!=255;Serial.print("RC522 version=");Serial.println(version);
+ if(!rfidReady){applyEvent(player.lost(millis()));uiDirty=true;}
+}
+static void pollRfid(uint32_t now){
+ if(!rfidReady||(calibrating&&forceCalibration)||uint32_t(now-lastRfidMs)<100)return;lastRfidMs=now;
+ digitalWrite(TFT_CS,HIGH);digitalWrite(TOUCH_CS,HIGH);
+ uint8_t atqa[2],size=2;auto status=rfid.PICC_WakeupA(atqa,&size);
+ if((status!=MFRC522::STATUS_OK&&status!=MFRC522::STATUS_COLLISION)||!rfid.PICC_ReadCardSerial())return;
+ const bool changed=lastUidLength!=rfid.uid.size||memcmp(lastUid,rfid.uid.uidByte,rfid.uid.size);
+ if(changed||(!player.present&&!player.unknown)){
+  printUid(rfid.uid.uidByte,rfid.uid.size);lastUidLength=rfid.uid.size;memcpy(lastUid,rfid.uid.uidByte,lastUidLength);
+  Serial.println(player.find(lastUid,lastUidLength)<0?"Unregistered UID: no playback":"Registered UID");uiDirty=true;
+ }
+ applyEvent(player.scan(rfid.uid.uidByte,rfid.uid.size,now));
+ rfid.PICC_HaltA();rfid.PCD_StopCrypto1();
+}
+void setup(){
+ Serial.begin(115200);
+ pinMode(37,INPUT_PULLUP);pinMode(38,INPUT_PULLUP);pinMode(39,INPUT_PULLUP);
+ pinMode(TFT_CS,OUTPUT);digitalWrite(TFT_CS,HIGH);pinMode(TOUCH_CS,OUTPUT);digitalWrite(TOUCH_CS,HIGH);pinMode(RFID_CS,OUTPUT);digitalWrite(RFID_CS,HIGH);
+ SPI.setPins(46,47,45);tft.begin(32000000);tft.setRotation(1);
+ renderAt(0);initAudio();initRfid();
+ forceCalibration=digitalRead(38)==LOW&&digitalRead(39)==LOW;
+ touchReady=!forceCalibration&&loadTouchCalibration();calibrating=!touchReady;
+ if(calibrating)showCalibrationTarget();else renderAt(0);
+ Serial.println("LP player: registered UID selects song; p=play/pause, +/-=volume, i=diagnose, u=UID, b=buttons");
+}
+void loop(){
+ uint32_t now=millis();pollAudio();pumpAudio(now);
+ bool toggle=playButton.pressed(now),up=volumeUpButton.pressed(now),down=volumeDownButton.pressed(now);
+ pollRfid(now);bool wasPresent=player.present,wasUnknown=player.unknown;applyEvent(player.tick(now));
+ if(wasPresent!=player.present||wasUnknown!=player.unknown)uiDirty=true;
+ if(calibrating&&(toggle||(!forceCalibration&&(player.present||up||down)))){calibrating=false;touchReady=false;uiDirty=true;}
+ pollTouch(now);
+ if(toggle)togglePlayback();if(up!=down)changeVolume(up?1:-1);
+ if(Serial.available()){
+  char command=Serial.read();
+  if(command=='p')togglePlayback();else if(command=='+')changeVolume(1);else if(command=='-')changeVolume(-1);
+  else if(command=='i'){initRfid();queueAudio(0x48,0);}
+  else if(command=='u')printUid(lastUid,lastUidLength);
+  else if(command=='b'){Serial.print("P1.05/06/07=");Serial.print(digitalRead(37));Serial.print('/');Serial.print(digitalRead(38));Serial.print('/');Serial.println(digitalRead(39));}
+ }
+ if(!calibrating&&(uiDirty||(player.playing&&uint32_t(now-lastDrawMs)>=100)))renderAt(0);
+ yield();
+}

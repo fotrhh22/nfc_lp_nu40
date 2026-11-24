@@ -1,0 +1,26 @@
+{
+  "board": "NU40DK nRF52840",
+  "display": "ILI9341",
+  "width": 320,
+  "height": 240,
+  "rotation": 1,
+  "pins": {
+    "tft_cs": 44,
+    "tft_dc": 3,
+    "tft_reset": 4,
+    "touch_cs": 35,
+    "spi_mosi": 45,
+    "spi_miso": 46,
+    "spi_sck": 47,
+    "button_play": 37,
+    "button_volume_up": 38,
+    "button_volume_down": 39,
+    "rfid_cs": 26,
+    "rfid_reset": 27,
+    "dfplayer_uart_rx": 33,
+    "dfplayer_uart_tx": 34
+  },
+  "recordedAppFlashBytes": 815104,
+  "recordedRamBytes": 237568,
+  "status": "Based on existing project records; verify toolchain, SPI pin mapping and hardware before upload."
+}

@@ -1,0 +1,21 @@
+.DS_Store
+.venv/
+__pycache__/
+*.pyc
+node_modules/
+projects/*
+!projects/README.md
+firmware/lp_player/lp_assets.h
+*.mp3
+*.wav
+*.mp4
+*.mov
+
+# Generated firmware and local export/session metadata
+firmware/lp_player/lp_player.ino
+docs/EXPORT_REPORT.json
+.env
+.env.*
+!.env.example
+.codex/
+.agents/
